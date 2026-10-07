@@ -64,9 +64,9 @@
             <div class="health-row"><span class="health-mark" id="health-record-mark">●</span><span>Video recording</span><strong id="health-record">Starting</strong></div>
             <div class="health-row"><span class="health-mark" id="health-gesture-mark">●</span><span>Hand gestures</span><strong id="health-gesture">Starting</strong></div>
             <div class="health-divider"></div>
-            <p class="help-text">Hold a <b>thumbs up</b> for one second to start recording. Hold an <b>open palm</b> to stop. Recording can also be controlled with the button above.</p>
-            <p class="gesture-status" id="gesture-status">Waiting for hand gesture…</p>
-            <button id="gesture-button" class="gesture-button" type="button">Turn gestures off</button>
+            <p class="help-text">Swipe up or down with one finger to scroll. Hold a <b>thumbs up</b> to start recording or an <b>open palm</b> to stop. Recording can also be controlled with the button above.</p>
+            <p class="gesture-status" id="gesture-status" aria-live="polite">Waiting for hand gesture…</p>
+            <button id="gesture-button" class="gesture-button" type="button" aria-pressed="true">Turn gestures off</button>
             <p class="help-text system-message" id="system-error">Helmet alerts require valid trained model weights. The dashboard can show and record camera video without them.</p>
           </article>
           <article class="panel activity-panel"><div class="panel-heading"><div><p class="eyebrow">LATEST SAVED VIDEO</p><h2>Recordings</h2></div><a href="#recordings" class="text-link">View all</a></div>

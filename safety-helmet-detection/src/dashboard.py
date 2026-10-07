@@ -23,7 +23,6 @@ from .camera import CameraSource
 from .config import DetectionConfig, PROJECT_ROOT
 from .detector import Detection, DetectionEngine
 from .event_logger import EventLogger
-from .hand_gestures import HandGestureRecognizer
 from .helmet_classifier import classify_status
 from .recorder import VideoRecorder
 from .renderer import render_frame
@@ -62,7 +61,6 @@ class CameraDashboard:
         self._thread: threading.Thread | None = None
         self._latest_jpeg = self._placeholder_jpeg()
         self._record_requested = True
-        self._gesture_requested = config.gesture_control_enabled
         self._recorder: VideoRecorder | None = None
         self._state: dict[str, object] = {
             "camera_connected": False,
@@ -130,7 +128,6 @@ class CameraDashboard:
 
     def set_gesture_control(self, enabled: bool) -> None:
         with self._lock:
-            self._gesture_requested = enabled
             self._state["gesture_control_enabled"] = enabled
             self._state["gesture_action"] = None
 
@@ -186,19 +183,6 @@ class CameraDashboard:
         stats = StatisticsCollector()
         previous_frame_time = time.monotonic()
         demo_frame_index = 0
-        next_gesture_check = 0.0
-        gesture_name: str | None = None
-        gesture_confidence = 0.0
-        gesture_recognizer: HandGestureRecognizer | None = None
-        try:
-            gesture_recognizer = HandGestureRecognizer(
-                confidence_threshold=self.config.gesture_confidence_threshold,
-            )
-        except (FileNotFoundError, ImportError, OSError, RuntimeError, ValueError) as exc:
-            with self._lock:
-                self._state["gesture_error"] = str(exc)
-                self._state["gesture"] = "Unavailable"
-
         try:
             while not self._stop_event.is_set():
                 status_by_person: dict[int, str] = {}
@@ -219,33 +203,6 @@ class CameraDashboard:
                             self._state["error"] = "Camera stopped returning frames."
                             self._state["status"] = "Camera disconnected"
                         break
-                gesture_action: bool | None = None
-                with self._lock:
-                    gesture_enabled = self._gesture_requested
-                now = time.monotonic()
-                if not gesture_enabled or gesture_recognizer is None:
-                    gesture_name = None
-                    gesture_confidence = 0.0
-                elif now >= next_gesture_check:
-                    gesture_name, gesture_confidence, gesture_action = gesture_recognizer.process(frame)
-                    next_gesture_check = now + 0.3
-                    if gesture_action is not None:
-                        self.set_recording(gesture_action)
-                        with self._lock:
-                            self._state["gesture_action"] = (
-                                "Recording started by thumbs up"
-                                if gesture_action
-                                else "Recording stopped by open palm"
-                            )
-                with self._lock:
-                    self._state["gesture"] = gesture_name or (
-                        "Show thumbs up to start or open palm to stop"
-                        if gesture_enabled and gesture_recognizer is not None
-                        else "Gesture control off"
-                    )
-                    self._state["gesture_confidence"] = round(gesture_confidence, 2)
-                    self._state["gesture_control_enabled"] = gesture_enabled
-
                 if self.detector is not None and not self.config.demo_mode:
                     detections = self.detector.detect(frame)
                     people, status_by_person, statuses = classify_frame_detections(
@@ -277,21 +234,6 @@ class CameraDashboard:
                     alert_banner=banner_status,
                     banner_color=banner_color,
                 )
-                if gesture_enabled and gesture_recognizer is not None:
-                    gesture_text = "Gesture: show thumbs up to start / open palm to stop"
-                    if gesture_name is not None:
-                        gesture_text = f"Gesture: {gesture_name.replace('_', ' ')} ({gesture_confidence:.0%})"
-                    cv2.putText(
-                        annotated,
-                        gesture_text,
-                        (12, 82),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        (255, 255, 255),
-                        1,
-                        cv2.LINE_AA,
-                    )
-
                 frame_time = time.monotonic()
                 frame_fps = 1.0 / max(frame_time - previous_frame_time, 1e-6)
                 previous_frame_time = frame_time
@@ -327,8 +269,6 @@ class CameraDashboard:
                 self._record_requested = False
                 self._state["recording_requested"] = False
         finally:
-            if gesture_recognizer is not None:
-                gesture_recognizer.close()
             if self._recorder is not None:
                 saved_path = self._recorder.release()
                 with self._lock:
@@ -438,6 +378,13 @@ def create_app(service: CameraDashboard) -> Flask:
     @app.get("/api/status")
     def api_status():
         return jsonify(service.snapshot())
+
+    @app.get("/gesture-model")
+    def gesture_model():
+        model_path = PROJECT_ROOT / "models" / "gesture_recognizer.task"
+        if not model_path.is_file():
+            return jsonify({"error": "The hand gesture model is unavailable."}), 404
+        return send_from_directory(model_path.parent, model_path.name, mimetype="application/octet-stream")
 
     @app.post("/api/recording")
     def api_recording():

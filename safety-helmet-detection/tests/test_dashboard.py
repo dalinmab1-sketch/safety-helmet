@@ -60,6 +60,13 @@ def test_dashboard_serves_page_status_and_video_feed(tmp_path):
     assert b"Saved recordings" in page.data
     assert b"Touch mode: Off" in page.data
     assert b'id="touch-mode-button"' in page.data
+    assert b"Swipe up or down with one finger" in page.data
+    assert b'id="gesture-status"' in page.data
+
+    model = client.head("/gesture-model")
+    assert model.status_code == 200
+    assert model.content_type == "application/octet-stream"
+    assert model.content_length > 0
 
     status = client.get("/api/status")
     assert status.status_code == 200

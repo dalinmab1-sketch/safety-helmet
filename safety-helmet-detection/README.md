@@ -9,7 +9,7 @@ This project implements a browser-based YOLO safety helmet dashboard for webcam 
 - YOLO-based person and PPE detection
 - Helmet/no-helmet/unknown classification
 - Stable no-helmet alerting with cooldown logic
-- Hand-gesture recording controls (thumbs up to start, open palm to stop)
+- JavaScript hand-gesture controls (one-finger swipes to scroll; thumbs up to start and open palm to stop recording)
 - Live statistics overlay
 - CSV logging for violation events
 - Start/stop real-time video recording and a saved-recordings download list
@@ -29,9 +29,10 @@ This project implements a browser-based YOLO safety helmet dashboard for webcam 
    [iam-tsr/yolov8n-helmet-detection](https://huggingface.co/iam-tsr/yolov8n-helmet-detection).
    Its classes are `With Helmet` and `Without Helmet`. Replace the weights only
    with another compatible model if you need to change the classifier.
-4. Hand gesture recognition uses the included MediaPipe task file,
-   `models/gesture_recognizer.task` (MediaPipe model:
-   https://ai.google.dev/edge/mediapipe/solutions/vision/gesture_recognizer).
+4. Browser hand tracking uses the included MediaPipe task file,
+   `models/gesture_recognizer.task`. The MediaPipe Tasks Vision JavaScript and
+   WebAssembly runtime are loaded from jsDelivr, so gesture controls need an
+   internet connection; the model itself is served by the local dashboard.
 5. Run the application:
 
    ```bash
@@ -45,7 +46,7 @@ This project implements a browser-based YOLO safety helmet dashboard for webcam 
 ## Controls
 
 - Use **Stop recording** / **Start recording** in the dashboard to control MP4 recording.
-- Hold a **thumbs up** in view for one second to start recording; hold an **open palm** for one second to stop. Turn gesture controls on or off in the dashboard.
+- Swipe up or down with one finger to smoothly scroll the page. Hold a **thumbs up** briefly to start recording or an **open palm** to stop. Use the dashboard toggle to turn gesture controls on or off.
 - Recordings are saved in the `recordings` folder and listed in the dashboard for download.
 - Press `Ctrl+C` in the terminal to stop the dashboard, release the camera, and finish saving.
 
