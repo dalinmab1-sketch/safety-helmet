@@ -1,0 +1,436 @@
+Safety Helmet Detection
+Computer Vision • AI Object Detection • Safety Monitoring
+Project Requirements & Software Specification
+Project Type
+Computer Vision Safety Application
+Detection
+Person + Safety Helmet
+Input
+Webcam / CCTV / Uploaded Image / Video
+Output
+Helmet / No Helmet + Bounding Boxes
+Main Technology
+Python + OpenCV + YOLO
+Mode
+Real-time Detection
+Target
+Construction / Training / Workplace Demonstration
+Version 1.0 • September 2026
+1. Project Overview
+Safety Helmet Detection is a computer-vision application designed to identify whether people in a camera view are wearing required safety helmets. The system processes live or recorded video, detects people and helmets, associates helmets with people, and displays the detection result using bounding boxes, labels, confidence scores, and visual status indicators.
+The project is intended as an educational and demonstration system for learning AI object detection, dataset preparation, model training, real-time inference, computer vision, and safety-monitoring workflows.
+2. Project Goals
+Detect people in a camera frame.
+Detect whether each visible person's head is covered by a safety helmet.
+Display Helmet / No Helmet status clearly.
+Work with real-time webcam or CCTV-style video.
+Provide confidence scores and visual bounding boxes.
+Generate an alert when a person is detected without a helmet.
+Maintain event statistics such as total people, helmet users, and violations.
+Create a modular system that students can train, test, and improve.
+3. Project Scope
+In Scope
+Description
+Priority
+Person Detection
+Detect people visible in the camera view.
+Must
+Helmet Detection
+Detect safety helmets associated with people.
+Must
+Status Classification
+Helmet / No Helmet / Unknown.
+Must
+Real-Time Display
+Show detection results on screen.
+Must
+Violation Alert
+Alert when a person is classified as No Helmet.
+Must
+Statistics
+Count people and safety states.
+Should
+Event Logging
+Record violation events without unnecessary personal data.
+Should
+Dashboard
+Display current safety statistics.
+Could
+4. Functional Requirements
+FR-01 — Application Start
+Launch the application from a single entry point.
+Check camera/input availability.
+Display a clear error when the input source is unavailable.
+Provide Start, Settings, Statistics, and Exit options.
+FR-02 — Input Sources
+Support webcam input.
+Support video-file input for testing.
+Optionally support RTSP/CCTV input in an advanced version.
+Allow the input source to be configured.
+FR-03 — Person Detection
+Detect people in each frame.
+Draw a bounding box around detected people.
+Display a confidence score.
+Filter detections below a configurable confidence threshold.
+FR-04 — Helmet Detection
+Detect safety helmets using a trained object-detection model.
+Identify helmet and/or no-helmet classes according to the selected dataset design.
+Associate helmet status with the relevant person.
+Display the result clearly.
+FR-05 — Person-Helmet Association
+Determine which helmet belongs to which detected person.
+Use bounding-box overlap, spatial relationship, or a dedicated detection model.
+Handle partially visible people where possible.
+Mark uncertain associations as Unknown rather than making an unsupported decision.
+FR-06 — Status Classification
+Show Helmet when the system has sufficient evidence of helmet use.
+Show No Helmet when the system has sufficient evidence of missing helmet protection.
+Show Unknown when confidence or visibility is insufficient.
+Use configurable thresholds.
+FR-07 — Real-Time Visualization
+Display live camera/video frames.
+Draw person and helmet bounding boxes.
+Display labels and confidence scores.
+Use distinct visual states for compliant, violation, and unknown detections.
+Display total people and violation count.
+FR-08 — Violation Alert
+Trigger an alert when a No Helmet detection remains stable for a configurable number of frames.
+Avoid repeated alerts for the same continuous event.
+Support sound or on-screen notification.
+Allow alerts to be enabled/disabled.
+FR-09 — Event Logging
+Record detection timestamp.
+Record event type and confidence.
+Optionally record camera/source identifier.
+Avoid storing personal identity information by default.
+Provide configurable retention for logs.
+FR-10 — Statistics
+Show total detected people.
+Show helmet-compliant detections.
+Show no-helmet detections.
+Show unknown/uncertain detections.
+Calculate violation rate for the selected monitoring period.
+FR-11 — Snapshot
+Optionally save a frame when a violation occurs.
+Make snapshot capture configurable.
+Clearly indicate when snapshots are enabled.
+Provide configurable storage location and retention.
+FR-12 — Settings
+Configure model path.
+Configure confidence threshold.
+Configure input source.
+Configure alert behavior.
+Configure logging/snapshot behavior.
+Configure display resolution.
+FR-13 — Error Handling
+Handle camera disconnection gracefully.
+Handle missing model files.
+Handle corrupted video input.
+Prevent application crashes from individual bad frames.
+Show useful error messages.
+5. AI Model Requirements
+Use an object-detection model suitable for real-time inference.
+YOLO-family models are recommended for the first implementation.
+The model must be trained or fine-tuned on a helmet-safety dataset representative of the intended environment.
+The dataset should include different helmet colors, lighting conditions, camera angles, distances, and partial occlusions.
+Training and validation data must be separated to reduce data leakage.
+The model should provide bounding boxes, class labels, and confidence scores.
+Model version and training configuration should be documented.
+6. Suggested Detection Classes
+Class
+Meaning
+Example Output
+Use
+person
+Human detected
+person 0.94
+Base object
+helmet
+Safety helmet detected
+helmet 0.91
+Compliance evidence
+no_helmet
+Person/head area without required helmet
+no_helmet 0.88
+Violation candidate
+Alternative design: train only person and helmet classes, then derive No Helmet from people without a sufficiently associated helmet. The selected approach should be documented and tested.
+7. Detection Pipeline
+Capture image/frame.
+Resize or preprocess the frame as required by the model.
+Run object detection inference.
+Filter low-confidence detections.
+Identify person detections.
+Identify helmet/no-helmet detections.
+Associate helmet status with the appropriate person.
+Apply temporal smoothing across frames.
+Determine Helmet / No Helmet / Unknown status.
+Render bounding boxes and labels.
+Trigger alerts for stable violations.
+Update statistics and optional event logs.
+8. Recommended Technology Stack
+Layer
+Technology
+Purpose
+Language
+Python 3.11+
+Application development
+Computer Vision
+OpenCV
+Camera/video processing
+AI Detection
+YOLO / Ultralytics
+Object detection
+Numerical Processing
+NumPy
+Image and coordinate calculations
+Data
+CSV / SQLite
+Event statistics and logs
+UI
+OpenCV window or Streamlit
+Monitoring interface
+Charts
+Matplotlib / Plotly
+Statistics dashboard
+Optional Tracking
+ByteTrack / BoT-SORT
+Track people across frames
+9. System Architecture
+Input Manager — receives webcam, video, or CCTV stream.
+Preprocessing — prepares frames for inference.
+Detection Engine — runs the trained AI model.
+Association/Tracking — connects helmet detections to people and optionally tracks them.
+Safety Decision Engine — determines Helmet / No Helmet / Unknown.
+Alert Manager — manages stable violation notifications.
+Statistics Manager — calculates current and historical counts.
+Event Logger — stores configurable violation events.
+Visualization/UI — renders video, boxes, labels, alerts, and statistics.
+Configuration Manager — manages thresholds and application settings.
+10. Suggested Project Structure
+safety-helmet-detection/│├── main.py├── requirements.txt├── README.md├── .env.example│├── src/│   ├── camera.py│   ├── detector.py│   ├── tracker.py│   ├── helmet_classifier.py│   ├── association.py│   ├── alert_manager.py│   ├── statistics.py│   ├── event_logger.py│   ├── renderer.py│   ├── config.py│   └── utils.py│├── models/│   └── helmet_model.pt│├── datasets/│   ├── images/│   ├── labels/│   └── data.yaml│├── tests/│   ├── test_detector.py│   ├── test_association.py│   ├── test_alert.py│   └── test_statistics.py│├── logs/├── snapshots/└── docs/    └── project-requirements.docx
+11. User Interface Requirements
+Show the live video prominently.
+Display person bounding boxes and safety status.
+Display confidence scores where useful.
+Show a top-level status such as SAFE / ATTENTION.
+Display total people detected.
+Display helmet-compliant count.
+Display no-helmet count.
+Display unknown count.
+Display current violation rate.
+Provide Start, Stop, Pause, Snapshot, and Settings controls.
+Provide a monitoring dashboard in the advanced version.
+12. Safety Status Logic
+Status
+Condition
+Display
+Action
+HELMET
+Helmet evidence above threshold
+Helmet
+No violation
+NO HELMET
+No-helmet evidence stable above threshold
+No Helmet
+Trigger violation alert
+UNKNOWN
+Low confidence / occlusion / insufficient evidence
+Unknown
+No automatic violation decision
+For safety-related applications, the system should distinguish an uncertain detection from a confirmed violation. A low-confidence or heavily occluded case should be treated as Unknown rather than automatically classified as No Helmet.
+13. Temporal Stability Requirements
+Do not trigger a violation from a single low-confidence frame.
+Require a configurable number of consistent detections or a time duration.
+Use tracking where practical to reduce duplicate counting.
+Use hysteresis or smoothing so the status does not rapidly switch between Helmet and No Helmet.
+Reset the violation state when the person leaves the scene or the condition changes for a stable period.
+14. Model Evaluation Requirements
+Metric
+Purpose
+Target / Guidance
+Precision
+Reduce false violation detections
+Measure separately for Helmet and No Helmet
+Recall
+Avoid missing actual helmet violations
+Measure on representative test data
+mAP
+Overall object detection performance
+Report mAP50 and relevant validation metrics
+FPS
+Real-time performance
+Target 20–30 FPS depending on hardware
+Latency
+Detection response
+Keep suitable for live monitoring
+False Positive Rate
+Important for practical alerts
+Minimize through data/threshold tuning
+15. Testing Requirements
+Test
+Expected Result
+Camera Test
+Live webcam opens and processes frames.
+Video Test
+Recorded videos process correctly.
+Person Detection Test
+People are detected across normal scenes.
+Helmet Test
+Helmet users are correctly identified.
+No-Helmet Test
+Non-compliant cases are detected on representative test images.
+Occlusion Test
+Partially hidden heads are handled as Unknown where confidence is insufficient.
+Distance Test
+Detection works at near, medium, and farther distances within the designed range.
+Lighting Test
+Test daylight, indoor, low-light, and high-contrast conditions.
+Multiple Person Test
+Several people can be processed in one frame.
+Association Test
+Helmet status is associated with the correct person.
+Temporal Test
+One continuous violation does not generate excessive duplicate alerts.
+Alert Test
+Configured alert triggers after stable violation.
+Statistics Test
+Counts and rates are updated correctly.
+Recovery Test
+Camera disconnection/model errors do not crash the application.
+Performance Test
+System maintains acceptable FPS on target hardware.
+16. Privacy & Data Protection Requirements
+Process video locally by default where possible.
+Do not identify people by name or face unless explicitly required for a separate approved feature.
+Do not store video continuously by default.
+If snapshots are enabled, clearly document what is stored, where, and for how long.
+Use configurable retention periods for logs and snapshots.
+Restrict access to stored monitoring data.
+Use the minimum data necessary for the project purpose.
+17. Safety-Critical Usage Limitation
+This project should initially be treated as a computer-vision demonstration and decision-support tool, not as the sole mechanism for enforcing workplace safety. Real-world deployment should include human review, site-specific validation, appropriate safety procedures, and testing under the actual operating conditions.
+Do not assume 100% detection accuracy.
+Do not automatically punish or identify a worker based solely on one AI prediction.
+Provide an Unknown state for uncertain cases.
+Validate the model on the actual environment before operational use.
+Document model limitations and known failure cases.
+18. Alert Requirements
+Visual alert on the monitoring screen.
+Optional audio alert.
+Optional event snapshot.
+Configurable alert cooldown.
+Avoid repeated alerts for the same person/event.
+Allow an operator to acknowledge an alert in an advanced dashboard.
+19. Project Deliverables
+Complete Python source code.
+Trained detection model or documented training procedure.
+Dataset description and class definitions.
+requirements.txt.
+README with installation and execution instructions.
+Project requirements document.
+System architecture diagram.
+AI detection pipeline diagram.
+Model evaluation report.
+Test cases and results.
+Demonstration video or live demonstration.
+20. Suggested Development Phases
+Phase
+Focus
+Output
+Phase 1
+Problem Definition
+Define helmet type, camera position, environment, and target classes.
+Phase 2
+Dataset
+Collect/prepare images and annotate person/helmet data.
+Phase 3
+Model Training
+Train/fine-tune YOLO and validate results.
+Phase 4
+Inference
+Run model on images and webcam video.
+Phase 5
+Association
+Associate helmets with people.
+Phase 6
+Temporal Logic
+Add tracking and stable status decisions.
+Phase 7
+Alerts
+Add violation alerts and cooldown.
+Phase 8
+Statistics
+Add counts, rates, and event logs.
+Phase 9
+UI
+Build monitoring interface/dashboard.
+Phase 10
+Testing
+Test lighting, angles, distances, and multiple people.
+Phase 11
+Optimization
+Improve FPS and model accuracy.
+Phase 12
+Deployment
+Prepare final demo and documentation.
+21. Acceptance Criteria
+The application successfully opens a supported camera or video source.
+People are detected and displayed with bounding boxes.
+Helmet status is displayed for detected people.
+The system distinguishes Helmet, No Helmet, and Unknown according to configured logic.
+Low-confidence detections do not immediately trigger a violation alert.
+Stable No Helmet cases trigger the configured alert.
+Multiple people can be monitored in the same frame.
+Statistics are updated correctly.
+The application handles camera/model errors without crashing.
+The system runs at an acceptable real-time frame rate on target hardware.
+All documented limitations and test results are included in the final report.
+22. Risks & Mitigation
+Risk
+Impact
+Mitigation
+Poor lighting
+Helmet/person detection becomes less accurate.
+Use representative training data and adequate lighting.
+Helmet color/shape variation
+Model may miss uncommon helmets.
+Collect diverse training examples.
+Occlusion
+Helmet may be partially hidden.
+Use Unknown state and representative occlusion data.
+Camera angle
+Head/helmet may be difficult to see.
+Define suitable camera placement.
+Small objects
+Far-away people may be hard to detect.
+Use suitable camera resolution and model settings.
+Crowded scenes
+Association may become difficult.
+Use tracking and better association logic.
+False alerts
+Normal conditions may be incorrectly flagged.
+Use confidence + temporal thresholds and human review.
+Model bias
+Performance may vary by environment.
+Evaluate across representative locations and conditions.
+Low FPS
+Delayed monitoring.
+Optimize resolution/model size and hardware.
+23. Future Enhancements
+Helmet color/type classification.
+Safety vest detection.
+Safety shoes detection.
+Safety gloves detection.
+Face shield / eye protection detection.
+Restricted-area intrusion detection.
+PPE compliance dashboard.
+Multi-camera monitoring.
+RTSP/IP camera support.
+Web dashboard with real-time statistics.
+Notification integration such as email or messaging.
+Edge deployment on NVIDIA Jetson or other edge AI hardware.
+Model optimization using ONNX/TensorRT where appropriate.
+24. Development Notes
+The most important part of this project is not only detecting helmets but establishing a reliable relationship between a person and the helmet detection. The development team should therefore test both detection accuracy and person-helmet association accuracy.
+For a student MVP, start with recorded images and video, then move to webcam inference. Once detection is stable, add temporal smoothing, alerts, statistics, and a dashboard. This staged approach makes debugging and evaluation easier.
+End of Project Requirements

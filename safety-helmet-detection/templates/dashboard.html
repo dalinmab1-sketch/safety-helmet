@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d151f">
+  <title>Hardhat — Safety Monitoring</title>
+  <link rel="icon" href="{{ url_for('static', filename='helmet-mark.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="Hardhat safety dashboard">
+        <img src="{{ url_for('static', filename='helmet-mark.svg') }}" alt="">
+        <span><strong>HARDHAT</strong><small>SAFETY SYSTEM</small></span>
+      </a>
+      <div class="nav-label">WORKSPACE</div>
+      <a class="nav-link active" href="#overview" data-nav-target="overview" aria-current="page"><span class="nav-icon">▦</span>Overview</a>
+      <a class="nav-link" href="#live-camera" data-nav-target="live-camera"><span class="nav-icon">◉</span>Live camera</a>
+      <a class="nav-link" href="#recordings" data-nav-target="recordings"><span class="nav-icon">▣</span>Recordings</a>
+      <div class="sidebar-bottom">
+        <div class="system-card">
+          <span class="system-dot" id="camera-dot"></span>
+          <div><strong id="camera-label">Connecting</strong><small>Camera status</small></div>
+        </div>
+        <small class="local-note">LOCAL MONITORING · THIS DEVICE</small>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar" id="overview">
+        <div><p class="eyebrow">WORKPLACE SAFETY</p><h1>Helmet monitoring</h1></div>
+        <div class="header-actions">
+          <span class="connection-pill"><span class="live-dot"></span> LIVE DASHBOARD</span>
+          <button id="touch-mode-button" class="touch-mode-button" type="button" aria-pressed="false">Touch mode: Off</button>
+          <button id="record-button" class="record-button" type="button"><span class="record-button-dot"></span><span>Stop recording</span></button>
+        </div>
+      </header>
+
+      <section class="status-strip">
+        <div class="status-copy"><span class="status-icon">!</span><div><strong id="model-title">Checking camera and model…</strong><p id="model-message">The dashboard is connecting to the camera.</p></div></div>
+        <span class="model-chip" id="model-chip">CONNECTING</span>
+      </section>
+
+      <section class="metric-grid" aria-label="Live detection statistics">
+        <article class="metric-card"><div class="metric-heading"><span>PEOPLE IN VIEW</span><span class="metric-icon people-icon">◎</span></div><strong id="people-count">—</strong><small>Current camera frame</small></article>
+        <article class="metric-card helmet-card"><div class="metric-heading"><span>HELMET DETECTED</span><span class="metric-icon helmet-icon">✓</span></div><strong id="helmet-count">—</strong><small>People classified with helmet</small></article>
+        <article class="metric-card violation-card"><div class="metric-heading"><span>NO HELMET</span><span class="metric-icon violation-icon">!</span></div><strong id="no-helmet-count">—</strong><small>People needing attention</small></article>
+        <article class="metric-card"><div class="metric-heading"><span>UNKNOWN STATUS</span><span class="metric-icon unknown-icon">?</span></div><strong id="unknown-count">—</strong><small>Not confidently classified</small></article>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel camera-panel" id="live-camera">
+          <div class="panel-heading"><div><p class="eyebrow">LIVE FEED</p><h2>Camera view</h2></div><span class="recording-badge" id="recording-badge"><i></i> REC</span></div>
+          <div class="video-frame"><img src="{{ url_for('video_feed') }}" alt="Live camera video feed" id="camera-feed"><div class="video-overlay" id="feed-error" hidden></div></div>
+          <div class="feed-footer"><span id="current-status">Waiting for camera…</span><span id="feed-meta">— · — FPS</span></div>
+        </article>
+
+        <aside class="right-column">
+          <article class="panel attention-panel"><div class="panel-heading"><div><p class="eyebrow">SYSTEM HEALTH</p><h2>Device status</h2></div></div>
+            <div class="health-row"><span class="health-mark" id="health-camera-mark">●</span><span>Camera</span><strong id="health-camera">Connecting</strong></div>
+            <div class="health-row"><span class="health-mark" id="health-model-mark">●</span><span>Helmet model</span><strong id="health-model">Checking</strong></div>
+            <div class="health-row"><span class="health-mark" id="health-record-mark">●</span><span>Video recording</span><strong id="health-record">Starting</strong></div>
+            <div class="health-row"><span class="health-mark" id="health-gesture-mark">●</span><span>Hand gestures</span><strong id="health-gesture">Starting</strong></div>
+            <div class="health-divider"></div>
+            <p class="help-text">Hold a <b>thumbs up</b> for one second to start recording. Hold an <b>open palm</b> to stop. Recording can also be controlled with the button above.</p>
+            <p class="gesture-status" id="gesture-status">Waiting for hand gesture…</p>
+            <button id="gesture-button" class="gesture-button" type="button">Turn gestures off</button>
+            <p class="help-text system-message" id="system-error">Helmet alerts require valid trained model weights. The dashboard can show and record camera video without them.</p>
+          </article>
+          <article class="panel activity-panel"><div class="panel-heading"><div><p class="eyebrow">LATEST SAVED VIDEO</p><h2>Recordings</h2></div><a href="#recordings" class="text-link">View all</a></div>
+            <div id="latest-recording" class="recording-list"><div class="empty-state">No saved recordings yet.</div></div>
+          </article>
+        </aside>
+      </section>
+
+      <section class="panel all-recordings" id="recordings"><div class="panel-heading"><div><p class="eyebrow">VIDEO LIBRARY</p><h2>Saved recordings</h2></div><span class="list-hint">MP4 · stored on this computer</span></div><div id="recordings-list" class="recording-list"><div class="empty-state">Loading recordings…</div></div></section>
+      <footer>HARDHAT SAFETY SYSTEM <span>·</span> Local camera dashboard</footer>
+    </main>
+  </div>
+  <script src="{{ url_for('static', filename='dashboard.js') }}" defer></script>
+</body>
+</html>
