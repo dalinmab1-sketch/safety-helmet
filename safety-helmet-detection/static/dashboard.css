@@ -75,6 +75,11 @@ body.touch-mode .health-row{padding-top:14px;padding-bottom:14px}
 .recording-badge i{animation:pulse 1.4s infinite}
 .video-frame{position:relative;width:100%;aspect-ratio:16/9;background:#080d12;border-radius:7px;overflow:hidden;display:grid;place-items:center}
 .video-frame img{width:100%;height:100%;object-fit:contain}
+.gesture-cursor{position:fixed;z-index:10000;display:none;left:0;top:0;width:30px;height:30px;transform:translate3d(var(--cursor-x,0px),var(--cursor-y,0px),0) translate(-50%,-50%);scale:1;transition:transform 50ms linear,scale 80ms ease-out;border:2px solid #ffd166;border-radius:50%;box-shadow:0 0 0 2px #101923,0 0 12px #000;pointer-events:none;will-change:transform}
+.gesture-cursor::after{content:"";position:absolute;left:50%;top:50%;width:5px;height:5px;transform:translate(-50%,-50%);background:#ffd166;border:1px solid #101923;border-radius:50%}
+.gesture-cursor.visible{display:block}
+.gesture-cursor.pinched{border-color:#55c48a;scale:.8}
+.gesture-cursor.pinched::after{background:#55c48a}
 .video-overlay{position:absolute;inset:0;display:grid;place-items:center;background:#0d151fdc;color:#ffc0c0;text-align:center;padding:25px}
 .feed-footer{display:flex;justify-content:space-between;gap:12px;padding-top:12px;color:#aeb9c4;font-size:11px}
 .feed-footer span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

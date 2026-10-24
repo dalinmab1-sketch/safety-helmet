@@ -10,7 +10,7 @@ class LiveStatistics:
     helmet_count: int = 0
     no_helmet_count: int = 0
     unknown_count: int = 0
-    violation_rate: float = 0.0
+    violation_rate: float | None = None
 
 
 class StatisticsCollector:
@@ -20,7 +20,7 @@ class StatisticsCollector:
         self.no_helmet_count = 0
         self.unknown_count = 0
         self.frame_people = 0
-        self.violation_rate = 0.0
+        self.violation_rate: float | None = None
 
     def update(self, statuses: Sequence[str]) -> LiveStatistics:
         self.frame_people = len(statuses)
@@ -28,7 +28,12 @@ class StatisticsCollector:
         self.no_helmet_count = sum(1 for status in statuses if status == "NO HELMET")
         self.unknown_count = sum(1 for status in statuses if status == "UNKNOWN")
         self.total_people += self.frame_people
-        self.violation_rate = (self.no_helmet_count / self.frame_people) * 100.0 if self.frame_people else 0.0
+        classified_people = self.helmet_count + self.no_helmet_count
+        self.violation_rate = (
+            (self.no_helmet_count / classified_people) * 100.0
+            if classified_people
+            else None
+        )
         return LiveStatistics(
             total_people=self.frame_people,
             helmet_count=self.helmet_count,

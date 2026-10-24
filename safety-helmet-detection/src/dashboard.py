@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 import pickle
 import threading
@@ -23,25 +24,48 @@ from .camera import CameraSource
 from .config import DetectionConfig, PROJECT_ROOT
 from .detector import Detection, DetectionEngine
 from .event_logger import EventLogger
-from .helmet_classifier import classify_status
 from .recorder import VideoRecorder
 from .renderer import render_frame
 from .statistics import StatisticsCollector
+from .tracker import PersonStatusTracker
 
 
 class CameraDashboard:
     def __init__(self, config: DetectionConfig):
         self.config = config
-        self.camera = CameraSource(config.input_source, config.camera_width, config.camera_height)
+        self.camera = CameraSource(
+            config.input_source,
+            config.camera_width,
+            config.camera_height,
+            target_fps=config.camera_fps,
+        )
         self.detector: DetectionEngine | None = None
         self.model_message = "Helmet model is not installed. Camera preview only."
         model_path = Path(config.model_path)
         if model_path.is_file() and model_path.stat().st_size > 0:
-            detector = DetectionEngine(model_path, config.confidence_threshold)
+            detector = DetectionEngine(
+                model_path,
+                config.confidence_threshold,
+                config.person_model_path,
+                config.person_confidence_threshold,
+                config.helmet_positive_threshold,
+                config.helmet_negative_threshold,
+                config.person_min_area_ratio,
+            )
             try:
                 if detector.load():
                     self.detector = detector
-                    self.model_message = "Helmet model loaded."
+                    if detector.has_person_detector:
+                        self.model_message = "Helmet and person detection models loaded."
+                    elif detector.person_model_error:
+                        self.model_message = (
+                            "Helmet model loaded; person detector could not load: "
+                            f"{detector.person_model_error}"
+                        )
+                    else:
+                        self.model_message = (
+                            "Helmet model loaded; person detector weights are unavailable."
+                        )
             except (
                 AttributeError,
                 EOFError,
@@ -60,7 +84,7 @@ class CameraDashboard:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._latest_jpeg = self._placeholder_jpeg()
-        self._record_requested = True
+        self._record_requested = False
         self._recorder: VideoRecorder | None = None
         self._state: dict[str, object] = {
             "camera_connected": False,
@@ -68,7 +92,7 @@ class CameraDashboard:
             "model_ready": self.detector is not None,
             "model_message": self.model_message,
             "recording": False,
-            "recording_requested": True,
+            "recording_requested": False,
             "gesture_control_enabled": config.gesture_control_enabled,
             "gesture": "Waiting for hand",
             "gesture_confidence": 0.0,
@@ -82,20 +106,61 @@ class CameraDashboard:
             "unknown": 0,
             "alerts": 0,
             "fps": 0.0,
+            "inference_fps": 0.0,
             "resolution": "--",
             "error": None,
             "updated_at": None,
         }
 
     @staticmethod
-    def _placeholder_jpeg() -> bytes:
+    def _placeholder_jpeg(
+        title: str = "Connecting to camera...",
+        subtitle: str | None = None,
+    ) -> bytes:
         image = np.zeros((480, 800, 3), dtype=np.uint8)
         image[:] = (29, 35, 42)
-        cv2.putText(image, "Connecting to camera...", (205, 245), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (235, 240, 245), 2, cv2.LINE_AA)
+        title_size = cv2.getTextSize(title, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)[0]
+        title_x = max((image.shape[1] - title_size[0]) // 2, 12)
+        cv2.putText(image, title, (title_x, 235), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (235, 240, 245), 2, cv2.LINE_AA)
+        if subtitle:
+            subtitle_size = cv2.getTextSize(subtitle, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)[0]
+            subtitle_x = max((image.shape[1] - subtitle_size[0]) // 2, 12)
+            cv2.putText(image, subtitle, (subtitle_x, 270), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (175, 185, 198), 1, cv2.LINE_AA)
         success, encoded = cv2.imencode(".jpg", image)
         if not success:
             raise RuntimeError("Could not create the dashboard placeholder image.")
         return encoded.tobytes()
+
+    def _show_camera_offline(self, error: str) -> None:
+        with self._lock:
+            self._state.update(
+                {
+                    "camera_connected": False,
+                    "error": error,
+                    "status": "Camera offline - retrying",
+                    "fps": 0.0,
+                    "inference_fps": 0.0,
+                    "resolution": "--",
+                }
+            )
+            self._latest_jpeg = self._placeholder_jpeg(
+                "CAMERA OFFLINE",
+                "Retrying connection...",
+            )
+
+    def _show_video_status(self, status: str, title: str, error: str | None = None) -> None:
+        with self._lock:
+            self._state.update(
+                {
+                    "camera_connected": False,
+                    "error": error,
+                    "status": status,
+                    "fps": 0.0,
+                    "inference_fps": 0.0,
+                    "resolution": "--",
+                }
+            )
+            self._latest_jpeg = self._placeholder_jpeg(title, error)
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -162,17 +227,6 @@ class CameraDashboard:
         if self.config.demo_mode:
             with self._lock:
                 self._state["status"] = "Demo mode"
-        else:
-            if not self.camera.open():
-                with self._lock:
-                    self._state["error"] = f"Cannot open camera or video source: {self.config.input_source}"
-                    self._state["status"] = "Camera unavailable"
-                return
-
-            with self._lock:
-                self._state["camera_connected"] = True
-                self._state["error"] = None
-                self._state["status"] = "Waiting for camera frame"
 
         event_logger = EventLogger(self.config.log_path)
         alert_manager = AlertManager(
@@ -181,14 +235,40 @@ class CameraDashboard:
             enabled=self.config.alert_enabled,
         )
         stats = StatisticsCollector()
+        tracker = PersonStatusTracker(
+            history_frames=self.config.status_history_frames,
+            minimum_votes=self.config.status_minimum_votes,
+            max_missed_frames=self.config.track_max_missed_frames,
+        )
         previous_frame_time = time.monotonic()
         demo_frame_index = 0
         try:
             while not self._stop_event.is_set():
+                if not self.config.demo_mode and not self.camera.is_open():
+                    if not self.camera.open():
+                        if self.camera.is_file_source:
+                            self._show_video_status(
+                                "VIDEO ERROR",
+                                "VIDEO SOURCE ERROR",
+                                f"Could not open video file: {self.config.input_source}",
+                            )
+                            break
+                        self._show_camera_offline(
+                            f"Cannot open camera or video source: {self.config.input_source}"
+                        )
+                        self._stop_event.wait(2.0)
+                        continue
+
+                    with self._lock:
+                        self._state["camera_connected"] = True
+                        self._state["error"] = None
+                        self._state["status"] = "Camera connected"
+
                 status_by_person: dict[int, str] = {}
                 detections = []
                 people = []
                 statuses: list[str] = []
+                inference_seconds = 0.0
                 if self.config.demo_mode:
                     frame, statuses = self._create_demo_frame(
                         demo_frame_index,
@@ -199,29 +279,91 @@ class CameraDashboard:
                 else:
                     frame = self.camera.read()
                     if frame is None:
-                        with self._lock:
-                            self._state["error"] = "Camera stopped returning frames."
-                            self._state["status"] = "Camera disconnected"
-                        break
+                        self.camera.release()
+                        if self.camera.is_file_source:
+                            self._show_video_status(
+                                "VIDEO COMPLETE",
+                                "VIDEO COMPLETE",
+                            )
+                            break
+                        self._show_camera_offline("Camera stopped returning frames.")
+                        self._stop_event.wait(1.0)
+                        continue
                 if self.detector is not None and not self.config.demo_mode:
+                    inference_started = time.monotonic()
                     detections = self.detector.detect(frame)
                     people, status_by_person, statuses = classify_frame_detections(
                         self.detector,
                         detections,
+                        frame,
+                    )
+                    tracker.update(people, status_by_person)
+                    statuses = list(status_by_person.values())
+                    inference_seconds = time.monotonic() - inference_started
+                    if self.config.diagnostic_mode:
+                        logging.getLogger(__name__).info(
+                            "Detection diagnostic: helmet_model=%s person_model=%s "
+                            "classes=%s person_detections=%s people=%s head_crops=%s "
+                            "helmet_predictions=%s statuses=%s",
+                            self.detector.model_path,
+                            self.detector.person_model_path,
+                            self.detector.names,
+                            [
+                                (item.label, round(item.confidence, 3), item.box)
+                                for item in detections
+                            ],
+                            [
+                                (item.track_id, item.box, status_by_person.get(item.index))
+                                for item in people
+                            ],
+                            [
+                                (item.label, round(item.confidence, 3), item.box)
+                                for item in getattr(self.detector, "last_status_detections", [])
+                            ],
+                            status_by_person,
+                        )
+                if self.config.diagnostic_mode and self.detector is not None:
+                    logging.getLogger(__name__).info(
+                        "Detection inference duration %.3f seconds (%.1f inference FPS)",
+                        inference_seconds,
+                        1.0 / max(inference_seconds, 1e-6),
                     )
                 stats.update(statuses)
 
                 alert_triggered = bool(
                     self.detector is not None
                     and not self.config.demo_mode
-                    and alert_manager.update(statuses)
+                    and alert_manager.update(
+                        statuses,
+                        [person.track_id for person in people],
+                    )
                 )
                 if alert_triggered:
-                    event_logger.log_violation("NO HELMET", 0.95, source=str(self.config.input_source))
+                    confidence = max(
+                        (
+                            person.status_confidence
+                            for person in people
+                            if status_by_person.get(person.index) == "NO HELMET"
+                        ),
+                        default=0.0,
+                    )
+                    event_logger.log_violation(
+                        "NO HELMET",
+                        confidence,
+                        source=str(self.config.input_source),
+                    )
                     if winsound is not None:
                         winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
 
-                banner_status, banner_color = self._banner(people, statuses)
+                person_detector_ready = bool(
+                    self.detector is not None and self.detector.has_person_detector
+                )
+                banner_status, banner_color = self._banner(
+                    people,
+                    statuses,
+                    model_ready=self.detector is not None,
+                    person_detector_ready=person_detector_ready,
+                )
                 if self.config.demo_mode:
                     banner_status = "DEMO MODE - SYNTHETIC CAMERA SCENE"
                     banner_color = (0, 140, 220)
@@ -234,15 +376,19 @@ class CameraDashboard:
                     alert_banner=banner_status,
                     banner_color=banner_color,
                 )
-                frame_time = time.monotonic()
-                frame_fps = 1.0 / max(frame_time - previous_frame_time, 1e-6)
-                previous_frame_time = frame_time
+                success, encoded = cv2.imencode(
+                    ".jpg",
+                    annotated,
+                    [cv2.IMWRITE_JPEG_QUALITY, 85],
+                )
+                if not success:
+                    raise RuntimeError("Could not encode a camera frame for the dashboard.")
                 resolution = f"{frame.shape[1]} x {frame.shape[0]}"
                 with self._lock:
                     self._write_recording(annotated)
-                    success, encoded = cv2.imencode(".jpg", annotated)
-                    if not success:
-                        raise RuntimeError("Could not encode a camera frame for the dashboard.")
+                    frame_time = time.monotonic()
+                    frame_fps = 1.0 / max(frame_time - previous_frame_time, 1e-6)
+                    previous_frame_time = frame_time
                     self._latest_jpeg = encoded.tobytes()
                     live_stats = stats.snapshot()
                     self._state.update(
@@ -253,6 +399,11 @@ class CameraDashboard:
                             "no_helmet": live_stats.no_helmet_count,
                             "unknown": live_stats.unknown_count,
                             "fps": round(frame_fps, 1),
+                            "inference_fps": (
+                                round(1.0 / max(inference_seconds, 1e-6), 1)
+                                if inference_seconds > 0 and self.detector is not None
+                                else 0.0
+                            ),
                             "resolution": resolution,
                             "updated_at": time.time(),
                             "model_ready": self.detector is not None,
@@ -282,14 +433,25 @@ class CameraDashboard:
                 self._state["camera_connected"] = False
 
     @staticmethod
-    def _banner(people: list, statuses: list[str]) -> tuple[str, tuple[int, int, int]]:
+    def _banner(
+        people: list,
+        statuses: list[str],
+        model_ready: bool = True,
+        person_detector_ready: bool = True,
+    ) -> tuple[str, tuple[int, int, int]]:
+        if not model_ready:
+            return "DETECTION MODEL UNAVAILABLE - PREVIEW ONLY", (0, 0, 220)
+        if not person_detector_ready:
+            return "PERSON DETECTOR UNAVAILABLE - STATUS NOT VERIFIED", (0, 0, 220)
         if not people:
-            return "NO PERSON DETECTED - STAND IN CAMERA VIEW", (0, 140, 220)
+            return "NO PERSON DETECTED - STAND IN CAMERA VIEW", (72, 82, 96)
+        if len(statuses) != len(people):
+            return "HELMET NOT VERIFIED - CHECK HELMET FIT", (0, 215, 255)
+        if all(status == "HELMET" for status in statuses):
+            return "HELMET DETECTED - YOU APPEAR TO BE WEARING ONE", (0, 170, 0)
         if "NO HELMET" in statuses:
             return "NO HELMET DETECTED - PLEASE PUT ONE ON", (0, 0, 220)
-        if "HELMET" in statuses:
-            return "HELMET DETECTED - YOU APPEAR TO BE WEARING ONE", (0, 170, 0)
-        return "HELMET STATUS UNKNOWN - FACE CAMERA CLEARLY", (0, 140, 220)
+        return "HELMET NOT VERIFIED - CHECK HELMET FIT", (0, 215, 255)
 
     @staticmethod
     def _create_demo_frame(frame_index: int, width: int, height: int) -> tuple[np.ndarray, list[str]]:
@@ -336,32 +498,27 @@ class CameraDashboard:
 def classify_frame_detections(
     detector: DetectionEngine,
     detections: Sequence[Detection],
+    frame: np.ndarray | None = None,
 ) -> tuple[list[Detection], dict[int, str], list[str]]:
     people = detector.person_detections(detections)
     if people:
-        safety_detections = detector.safety_detections(detections)
-        person_statuses = associate_people_with_helmets(people, safety_detections)
+        safety_detections = (
+            detector.detect_status_detections(frame)
+            if frame is not None and hasattr(detector, "detect_status_detections")
+            else detector.safety_detections(detections)
+        )
+        person_statuses = associate_people_with_helmets(
+            people,
+            safety_detections,
+            positive_threshold=getattr(detector, "helmet_positive_threshold", 0.90),
+            negative_threshold=getattr(detector, "helmet_negative_threshold", 0.35),
+        )
+        for item in person_statuses:
+            item.person.status_confidence = item.confidence if item.status != "UNKNOWN" else 0.0
         status_by_person = {item.person.index: item.status for item in person_statuses}
         return people, status_by_person, list(status_by_person.values())
 
-    direct_statuses = [
-        (detection, classify_status(detection.label))
-        for detection in detections
-    ]
-    direct_statuses = [
-        (detection, status)
-        for detection, status in direct_statuses
-        if status in {"HELMET", "NO HELMET"}
-    ]
-    if not direct_statuses:
-        return [], {}, []
-
-    detected_subjects = [detection for detection, _ in direct_statuses]
-    status_by_person = {
-        detection.index: status
-        for detection, status in direct_statuses
-    }
-    return detected_subjects, status_by_person, list(status_by_person.values())
+    return [], {}, []
 
 
 def create_app(service: CameraDashboard) -> Flask:
@@ -413,10 +570,13 @@ def create_app(service: CameraDashboard) -> Flask:
     @app.get("/video_feed")
     def video_feed():
         def generate() -> Iterator[bytes]:
+            last_frame: bytes | None = None
             while True:
                 frame = service.latest_jpeg()
-                yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
-                time.sleep(0.05)
+                if frame is not last_frame:
+                    yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+                    last_frame = frame
+                time.sleep(1.0 / 60.0)
 
         return Response(stream_with_context(generate()), mimetype="multipart/x-mixed-replace; boundary=frame")
 

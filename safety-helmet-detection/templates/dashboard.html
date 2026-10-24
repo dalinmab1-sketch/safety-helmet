@@ -34,7 +34,7 @@
         <div class="header-actions">
           <span class="connection-pill"><span class="live-dot"></span> LIVE DASHBOARD</span>
           <button id="touch-mode-button" class="touch-mode-button" type="button" aria-pressed="false">Touch mode: Off</button>
-          <button id="record-button" class="record-button" type="button"><span class="record-button-dot"></span><span>Stop recording</span></button>
+          <button id="record-button" class="record-button paused" type="button"><span class="record-button-dot"></span><span>Start recording</span></button>
         </div>
       </header>
 
@@ -52,7 +52,7 @@
 
       <section class="content-grid">
         <article class="panel camera-panel" id="live-camera">
-          <div class="panel-heading"><div><p class="eyebrow">LIVE FEED</p><h2>Camera view</h2></div><span class="recording-badge" id="recording-badge"><i></i> REC</span></div>
+          <div class="panel-heading"><div><p class="eyebrow">LIVE FEED</p><h2>Camera view</h2></div><span class="recording-badge paused" id="recording-badge"><i></i> PAUSED</span></div>
           <div class="video-frame"><img src="{{ url_for('video_feed') }}" alt="Live camera video feed" id="camera-feed"><div class="video-overlay" id="feed-error" hidden></div></div>
           <div class="feed-footer"><span id="current-status">Waiting for camera…</span><span id="feed-meta">— · — FPS</span></div>
         </article>
@@ -61,10 +61,10 @@
           <article class="panel attention-panel"><div class="panel-heading"><div><p class="eyebrow">SYSTEM HEALTH</p><h2>Device status</h2></div></div>
             <div class="health-row"><span class="health-mark" id="health-camera-mark">●</span><span>Camera</span><strong id="health-camera">Connecting</strong></div>
             <div class="health-row"><span class="health-mark" id="health-model-mark">●</span><span>Helmet model</span><strong id="health-model">Checking</strong></div>
-            <div class="health-row"><span class="health-mark" id="health-record-mark">●</span><span>Video recording</span><strong id="health-record">Starting</strong></div>
+            <div class="health-row"><span class="health-mark" id="health-record-mark">●</span><span>Video recording</span><strong id="health-record">Paused</strong></div>
             <div class="health-row"><span class="health-mark" id="health-gesture-mark">●</span><span>Hand gestures</span><strong id="health-gesture">Starting</strong></div>
             <div class="health-divider"></div>
-            <p class="help-text">Swipe up or down with one finger to scroll. Hold a <b>thumbs up</b> to start recording or an <b>open palm</b> to stop. Recording can also be controlled with the button above.</p>
+            <p class="help-text">Swipe up or down with one finger to scroll. Point with your index finger to move the on-screen cursor; pinch your thumb and index finger to click a control. Hold a <b>thumbs up</b> to start recording or an <b>open palm</b> to stop. Recording can also be controlled with the button above.</p>
             <p class="gesture-status" id="gesture-status" aria-live="polite">Waiting for hand gesture…</p>
             <button id="gesture-button" class="gesture-button" type="button" aria-pressed="true">Turn gestures off</button>
             <p class="help-text system-message" id="system-error">Helmet alerts require valid trained model weights. The dashboard can show and record camera video without them.</p>

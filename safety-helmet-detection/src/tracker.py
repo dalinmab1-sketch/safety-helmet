@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
+import math
 from typing import Dict, List, Tuple
 
+from .detector import Detection
+from .utils import iou
 
 @dataclass
 class TrackedObject:
@@ -44,3 +48,109 @@ class SimpleTracker:
                     current[object_id] = tracked
         self._objects = current
         return self._objects
+
+
+@dataclass
+class _PersonTrack:
+    track_id: int
+    box: tuple[float, float, float, float]
+    missed_frames: int = 0
+    evidence: deque[tuple[str, float]] = field(default_factory=deque)
+
+
+class PersonStatusTracker:
+    def __init__(
+        self,
+        history_frames: int = 3,
+        minimum_votes: int = 2,
+        max_missed_frames: int = 5,
+    ):
+        if history_frames < 1:
+            raise ValueError("Status history must contain at least one frame.")
+        if not 1 <= minimum_votes <= history_frames:
+            raise ValueError("Minimum status votes must fit within the history window.")
+        if max_missed_frames < 0:
+            raise ValueError("Maximum missed frames cannot be negative.")
+        self.history_frames = history_frames
+        self.minimum_votes = minimum_votes
+        self.max_missed_frames = max_missed_frames
+        self._tracks: dict[int, _PersonTrack] = {}
+        self._next_id = 1
+
+    def update(self, people: List[Detection], statuses: dict[int, str]) -> list[Detection]:
+        candidates: list[tuple[float, float, int, int]] = []
+        for person_index, person in enumerate(people):
+            for track_id, track in self._tracks.items():
+                overlap = iou(person.box, track.box)
+                distance = math.dist(person.center, self._center(track.box))
+                person_scale = max(person.y2 - person.y1, track.box[3] - track.box[1], 1.0)
+                if overlap >= 0.05 or distance <= person_scale * 0.35:
+                    candidates.append((overlap, -distance / person_scale, person_index, track_id))
+        candidates.sort(reverse=True)
+
+        matched_people: set[int] = set()
+        matched_tracks: set[int] = set()
+        assignments: dict[int, _PersonTrack] = {}
+        for candidate in candidates:
+            person_index, track_id = candidate[2], candidate[3]
+            if person_index in matched_people or track_id in matched_tracks:
+                continue
+            matched_people.add(person_index)
+            matched_tracks.add(track_id)
+            assignments[person_index] = self._tracks[track_id]
+
+        for person_index, person in enumerate(people):
+            track = assignments.get(person_index)
+            if track is None:
+                track = _PersonTrack(
+                    track_id=self._next_id,
+                    box=person.box,
+                    evidence=deque(maxlen=self.history_frames),
+                )
+                self._tracks[track.track_id] = track
+                self._next_id += 1
+            matched_tracks.add(track.track_id)
+            track.box = person.box
+            track.missed_frames = 0
+
+            status = statuses.get(person.index, "UNKNOWN")
+            confidence = person.status_confidence
+            if status not in {"HELMET", "NO HELMET"}:
+                track.evidence.clear()
+                smoothed_status = "UNKNOWN"
+                smoothed_confidence = 0.0
+            else:
+                track.evidence.append((status, confidence))
+                counts = {
+                    candidate: sum(1 for item, _ in track.evidence if item == candidate)
+                    for candidate in ("HELMET", "NO HELMET")
+                }
+                winner = max(counts, key=counts.get)
+                if counts[winner] < self.minimum_votes or counts["HELMET"] == counts["NO HELMET"]:
+                    smoothed_status = "UNKNOWN"
+                    smoothed_confidence = 0.0
+                else:
+                    smoothed_status = winner
+                    smoothed_confidence = sum(
+                        score for item, score in track.evidence if item == winner
+                    ) / counts[winner]
+
+            person.track_id = track.track_id
+            person.status_confidence = smoothed_confidence
+            statuses[person.index] = smoothed_status
+
+        for track_id, track in list(self._tracks.items()):
+            if track_id in matched_tracks or track_id in {
+                item.track_id for item in assignments.values()
+            }:
+                continue
+            track.missed_frames += 1
+            track.evidence.clear()
+            if track.missed_frames > self.max_missed_frames:
+                del self._tracks[track_id]
+
+        return people
+
+    @staticmethod
+    def _center(box: tuple[float, float, float, float]) -> tuple[float, float]:
+        return ((box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0)

@@ -15,8 +15,21 @@ def test_alert_waits_for_streak_and_respects_cooldown(monkeypatch):
     assert not alerts.update(["NO HELMET"])
     assert not alerts.update(["NO HELMET"])
 
+    assert not alerts.update(["NO HELMET"])
     now += 5.1
     assert alerts.update(["NO HELMET"])
+    assert not alerts.update(["NO HELMET"])
+
+
+def test_alerts_are_once_per_continuous_tracked_violation():
+    alerts = AlertManager(alert_after_frames=2, cooldown_seconds=0)
+
+    assert not alerts.update(["NO HELMET"], [41])
+    assert alerts.update(["NO HELMET"], [41])
+    assert not alerts.update(["NO HELMET"], [41])
+    assert not alerts.update(["HELMET"], [41])
+    assert not alerts.update(["NO HELMET"], [41])
+    assert alerts.update(["NO HELMET"], [41])
 
 
 def test_alert_is_disabled_and_empty_status_resets_streak():

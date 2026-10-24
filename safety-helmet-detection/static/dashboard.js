@@ -10,10 +10,14 @@ const gestureButton = byId("gesture-button");
 const gestureStatus = byId("gesture-status");
 const gestureCanvas = document.createElement("canvas");
 const gestureContext = gestureCanvas.getContext("2d", {willReadFrequently: true});
+const gestureCursor = document.createElement("div");
+gestureCursor.className = "gesture-cursor";
+gestureCursor.setAttribute("aria-hidden", "true");
+document.body.append(gestureCursor);
 const gestureWasmUrl = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const gestureModuleUrl = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
-const recordingGestureHoldMs = 850;
-const gestureReleaseMs = 650;
+const recordingGestureHoldMs = 750;
+const gestureReleaseMs = 800;
 const swipeDistanceThreshold = 0.12;
 const swipeWindowMs = 850;
 
@@ -33,6 +37,7 @@ let recordingGestureReleaseAt = 0;
 let swipeSamples = [];
 let swipeLatched = false;
 let nonPointingSince = 0;
+let pinchActive = false;
 let lastStatusMessageAt = 0;
 
 function setTouchMode(enabled) {
@@ -257,9 +262,9 @@ async function initializeGestureRecognizer() {
     baseOptions: {modelAssetPath: "/gesture-model", delegate: "CPU"},
     runningMode: "VIDEO",
     numHands: 1,
-    minHandDetectionConfidence: 0.65,
-    minHandPresenceConfidence: 0.6,
-    minTrackingConfidence: 0.6,
+    minHandDetectionConfidence: 0.5,
+    minHandPresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5,
   });
   if (gestureEnabled) {
     gestureRuntimeStatus = "Enabled";
@@ -278,6 +283,8 @@ function resetGestureState() {
   nonPointingSince = 0;
   currentGestureLabel = "";
   currentGestureConfidence = 0;
+  pinchActive = false;
+  gestureCursor.classList.remove("visible", "pinched");
 }
 
 function distanceBetween(first, second) {
@@ -286,12 +293,39 @@ function distanceBetween(first, second) {
 
 function isIndexOnlyPoint(landmarks, categoryName) {
   if (categoryName === "Pointing_Up") return true;
-  const wrist = landmarks[0];
-  const fingerPairs = [[8, 6], [12, 10], [16, 14], [20, 18]];
-  const extended = fingerPairs.map(([tip, pip]) =>
-    distanceBetween(landmarks[tip], wrist) > distanceBetween(landmarks[pip], wrist) * 1.08
+  const fingerJoints = [[8, 6, 5], [12, 10, 9], [16, 14, 13], [20, 18, 17]];
+  const extended = fingerJoints.map(([tip, pip, mcp]) =>
+    distanceBetween(landmarks[tip], landmarks[mcp]) >
+    distanceBetween(landmarks[pip], landmarks[mcp]) * 1.25
   );
   return extended[0] && !extended[1] && !extended[2] && !extended[3];
+}
+
+function updateGestureCursor(landmarks, pointing) {
+  if (!pointing) {
+    gestureCursor.classList.remove("visible", "pinched");
+    pinchActive = false;
+    return;
+  }
+
+  const x = landmarks[8].x * window.innerWidth;
+  const y = landmarks[8].y * window.innerHeight;
+  const cursorX = Math.max(0, Math.min(window.innerWidth, x));
+  const cursorY = Math.max(0, Math.min(window.innerHeight, y));
+
+  gestureCursor.style.setProperty("--cursor-x", `${cursorX}px`);
+  gestureCursor.style.setProperty("--cursor-y", `${cursorY}px`);
+  gestureCursor.classList.add("visible");
+
+  const palmWidth = distanceBetween(landmarks[5], landmarks[17]);
+  const pinched = palmWidth > 0 && distanceBetween(landmarks[4], landmarks[8]) < palmWidth * 0.4;
+  gestureCursor.classList.toggle("pinched", pinched);
+  if (pinched && !pinchActive) {
+    const target = document.elementFromPoint(cursorX, cursorY);
+    const control = target?.closest("button, a, input, select, textarea, [role='button']");
+    if (control && !control.matches(":disabled")) control.click();
+  }
+  pinchActive = pinched;
 }
 
 function showGesture(label, confidence = 0) {
@@ -386,10 +420,12 @@ function processGestureFrame() {
       const confidence = category?.score || 0;
       let label = null;
 
-      if (category && confidence >= 0.65) {
+      if (category && confidence >= 0.5) {
         if (category.categoryName === "Thumb_Up") label = "Thumbs Up";
         if (category.categoryName === "Open_Palm") label = "Open Palm";
       }
+      const pointing = Boolean(!label && landmarks && isIndexOnlyPoint(landmarks, category?.categoryName));
+      updateGestureCursor(landmarks, pointing);
       const swipe = findSwipe(label ? null : landmarks, now, category?.categoryName);
       if (label) {
         showGesture(label, confidence);
@@ -400,6 +436,12 @@ function processGestureFrame() {
           showGesture(swipe);
           const distance = Math.round(window.innerHeight * 0.65) * (swipe === "Swipe Up" ? -1 : 1);
           window.scrollBy({top: distance, behavior: "smooth"});
+        } else if (pointing) {
+          showGesture("Pointing — pinch to click");
+        } else if (landmarks) {
+          showGesture("Hand detected");
+        } else {
+          showGesture("No hand detected — move hand into camera view");
         }
       }
     }
@@ -411,7 +453,7 @@ function processGestureFrame() {
     updateGestureIndicator();
     return;
   }
-  gestureLoopTimer = window.setTimeout(processGestureFrame, 100);
+  gestureLoopTimer = window.setTimeout(processGestureFrame, 1000 / 30);
 }
 
 function runGestureDetection() {

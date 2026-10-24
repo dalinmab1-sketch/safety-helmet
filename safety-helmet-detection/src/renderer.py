@@ -10,7 +10,7 @@ from .statistics import LiveStatistics
 STATUS_COLORS = {
     "HELMET": (0, 170, 0),
     "NO HELMET": (0, 0, 220),
-    "UNKNOWN": (0, 165, 255),
+    "UNKNOWN": (0, 215, 255),
 }
 
 
@@ -33,23 +33,20 @@ def render_frame(
     banner_color: tuple[int, int, int] = (0, 165, 255),
 ) -> np.ndarray:
     annotated = frame.copy()
+    person_indices = {person.index for person in people}
 
     for detection in all_detections:
-        if detection.label.lower() == "person" or detection.index in status_by_person:
+        if detection.label.lower() == "person" and detection.index in person_indices:
             status = status_by_person.get(detection.index, "UNKNOWN")
             color = STATUS_COLORS.get(status, STATUS_COLORS["UNKNOWN"])
-            label = "person" if detection.label.lower() == "person" else "worker"
-            _draw_box(annotated, detection, color, f"{label}: {status}", detection.confidence)
-        else:
-            label = detection.label
-            lowered = label.lower()
-            if "no" in lowered or "without" in lowered:
-                color = STATUS_COLORS["NO HELMET"]
-            elif "helmet" in lowered:
-                color = STATUS_COLORS["HELMET"]
-            else:
-                color = STATUS_COLORS["UNKNOWN"]
-            _draw_box(annotated, detection, color, label, detection.confidence)
+            track_label = f" #{detection.track_id}" if detection.track_id is not None else ""
+            _draw_box(
+                annotated,
+                detection,
+                color,
+                f"person{track_label}: {status}",
+                detection.status_confidence if status != "UNKNOWN" else None,
+            )
 
     height, width = annotated.shape[:2]
     cv2.rectangle(annotated, (0, 0), (width, 58), banner_color, -1)
@@ -68,10 +65,15 @@ def render_frame(
         cv2.LINE_AA,
     )
 
+    violation_rate = (
+        f"{stats.violation_rate:.1f}%"
+        if stats.violation_rate is not None
+        else "N/A"
+    )
     stats_text = (
         f"People: {stats.total_people} | Helmet: {stats.helmet_count} | "
         f"No Helmet: {stats.no_helmet_count} | Unknown: {stats.unknown_count} | "
-        f"Violation Rate: {stats.violation_rate:.1f}%"
+        f"Violation Rate: {violation_rate}"
     )
     cv2.putText(
         annotated,
